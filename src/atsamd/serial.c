@@ -276,7 +276,7 @@ uart_setup(uint8_t bus, uint32_t baud, uint8_t *id, uint32_t priority)
 #if CONFIG_MACH_SAMD21
     NVIC_SetPriority(bi->irqn, priority);
     NVIC_EnableIRQ(bi->irqn);
-#elif CONFIG_MACH_SAMD51
+#elif CONFIG_MACH_SAMX5
     NVIC_SetPriority(bi->irqn0, priority);
     NVIC_EnableIRQ(bi->irqn0);
     NVIC_SetPriority(bi->irqn1, priority);
