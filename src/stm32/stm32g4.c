@@ -7,7 +7,6 @@
 #include "autoconf.h" // CONFIG_CLOCK_REF_FREQ
 #include "board/armcm_boot.h" // VectorTable
 #include "board/irq.h" // irq_disable
-#include "board/usb_cdc.h" // usb_request_bootloader
 #include "command.h" // DECL_CONSTANT_STR
 #include "internal.h" // enable_pclock
 #include "sched.h" // sched_main
@@ -66,19 +65,6 @@ gpio_clock_enable(GPIO_TypeDef *regs)
     RCC->AHB2ENR;
 }
 
-#define USB_BOOT_FLAG_ADDR (CONFIG_RAM_START + CONFIG_RAM_SIZE - 4096)
-#define USB_BOOT_FLAG 0x55534220424f4f54 // "USB BOOT"
-
-// Handle USB reboot requests
-void
-bootloader_request(void)
-{
-    irq_disable();
-    // System DFU Bootloader
-    *(uint64_t*)USB_BOOT_FLAG_ADDR = USB_BOOT_FLAG;
-    NVIC_SystemReset();
-}
-
 #if !CONFIG_STM32_CLOCK_REF_INTERNAL
 DECL_CONSTANT_STR("RESERVE_PINS_crystal", "PF0,PF1");
 #endif
@@ -130,7 +116,7 @@ clock_setup(void)
                        ((CONFIG_CLOCK_FREQ>30000000) ? FLASH_ACR_LATENCY_1WS :
                                                     FLASH_ACR_LATENCY_0WS)))));
     FLASH->ACR = (latency | FLASH_ACR_ICEN | FLASH_ACR_DCEN
-                  | FLASH_ACR_PRFTEN);
+                  | FLASH_ACR_PRFTEN | FLASH_ACR_DBG_SWEN);
 
     enable_pclock(PWR_BASE);
     PWR->CR3 |= PWR_CR3_APC; // allow gpio pullup/down
@@ -148,15 +134,28 @@ clock_setup(void)
         ;
 }
 
+
+/****************************************************************
+ * Bootloader
+ ****************************************************************/
+
+// Handle USB reboot requests
+void
+bootloader_request(void)
+{
+    dfu_reboot();
+}
+
+
+/****************************************************************
+ * Startup
+ ****************************************************************/
+
 // Main entry point - called from armcm_boot.c:ResetHandler()
 void
-armcm_main(void) {
-    if (CONFIG_USBSERIAL && *(uint64_t*)USB_BOOT_FLAG_ADDR == USB_BOOT_FLAG) {
-        *(uint64_t*)USB_BOOT_FLAG_ADDR = 0;
-        uint32_t *sysbase = (uint32_t*)0x1fff0000;
-        asm volatile("mov sp, %0\n bx %1"
-                     : : "r"(sysbase[0]), "r"(sysbase[1]));
-    }
+armcm_main(void)
+{
+    dfu_reboot_check();
 
     // Run SystemInit() and then restore VTOR
     SystemInit();
